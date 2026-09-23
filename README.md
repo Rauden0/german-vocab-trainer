@@ -13,31 +13,35 @@ You only need Python 3. Nothing else has to be installed.
 
 ## On your phone
 
-**Option 1: same Wi-Fi as your computer (any phone)**
+**Recommended: the phone app (Android and iPhone, works offline, no computer needed)**
 
-```bash
-python3 app.py --lan
-```
+1. Open **https://rauden0.github.io/german-vocab-trainer/** in the phone's browser.
+2. Add it to the home screen:
+   - Android (Chrome): menu ⋮ → *Add to Home screen* / *Install app*
+   - iPhone (Safari): Share → *Add to Home Screen*
+3. It now opens like a normal app and works offline.
+   - Progress is stored on the phone.
+   - It's the same app, logic and word list as the desktop version.
 
-- The terminal prints an address like `http://192.168.1.23:8765`. Open it in your phone's browser.
-- In the browser menu, choose "Add to Home screen" to get an app-like icon.
-- The computer has to stay on with the app running.
-- Anyone on the same network can open the app, so only use `--lan` on a network you trust.
+**Moving progress between the phone and your computer**
 
-**Option 2: directly on an Android phone (no computer needed)**
+In the **Progress** tab on the phone there is a *Backup & sync* section.
 
-1. Install **Termux** from F-Droid (the Google Play version is outdated).
-2. In Termux:
-   ```bash
-   pkg install python git
-   git clone https://github.com/Rauden0/german-vocab-trainer.git
-   cd german-vocab-trainer
-   python app.py
-   ```
-3. Open `http://127.0.0.1:8765` in the phone's browser.
+- Phone → computer:
+  1. On the phone, tap *Export progress.json* and send the file to your computer.
+  2. Put it in the project folder, replacing the old one.
+  3. Start `python3 app.py`. It merges the file.
+- Computer → phone: on the phone, tap *Import progress.json* and pick the `progress.json` from the computer.
+- Merging keeps the most recently practised version of each word, so importing twice is harmless.
 
-To sync progress between the phone and your computer, use `git pull` and push `progress.json` (see below).
-iPhone can only use option 1.
+The phone app is built from the desktop app with `python3 tools/build_web.py` (output in `docs/`, served by GitHub Pages).
+Re-run it after changing the word lists, `static/index.html` or `web/engine.js`.
+
+**Alternative: use the desktop app from your phone over Wi-Fi**
+
+- Run `python3 app.py --lan` and open the printed address on your phone.
+- The computer must stay on.
+- There's no password, so only do this on a network you trust.
 
 ## Your progress (`progress.json`)
 

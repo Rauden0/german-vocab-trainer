@@ -80,6 +80,13 @@
   .err { color: var(--bad); }
   @media (max-width: 560px) { .prompt { font-size: 25px; } .form { grid-template-columns: 1fr; } .panel { padding: 18px; } }
 </style>
+<link rel="manifest" href="manifest.webmanifest">
+<meta name="theme-color" content="#2f5bd3">
+<link rel="icon" href="icon-192.png">
+<link rel="apple-touch-icon" href="icon-180.png">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Wortschatz">
 </head>
 <body>
 <header>
@@ -126,6 +133,10 @@
   </section>
 </main>
 
+<script src="engine.js"></script>
+<script>
+  if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js");
+</script>
 <script>
 const $ = s => document.querySelector(s);
 const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
