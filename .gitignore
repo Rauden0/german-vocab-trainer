@@ -1,0 +1,5 @@
+# personal progress database
+german.db
+german.db-journal
+__pycache__/
+*.pyc

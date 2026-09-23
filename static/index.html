@@ -1,0 +1,407 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Wortschatz Trainer</title>
+<style>
+  :root {
+    --bg: #f6f5f1; --panel: #ffffff; --text: #1d1d1f; --muted: #6b6b70; --line: #e3e1da;
+    --accent: #2f5bd3; --good: #1f8a4c; --warn: #b7791f; --bad: #c0392b;
+    --good-bg: #e7f5ec; --warn-bg: #fdf3e1; --bad-bg: #fbeaea;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #151517; --panel: #1f1f23; --text: #ececf0; --muted: #9a9aa3; --line: #303036;
+      --accent: #7c9dff; --good: #4cc47f; --warn: #e3a948; --bad: #ef6b5b;
+      --good-bg: #16301f; --warn-bg: #33280f; --bad-bg: #3a1a17;
+    }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text);
+         font: 16px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif; }
+  header { display: flex; align-items: center; gap: 24px; padding: 14px 24px;
+           border-bottom: 1px solid var(--line); background: var(--panel); flex-wrap: wrap; }
+  header h1 { font-size: 18px; margin: 0; letter-spacing: .3px; }
+  nav button { background: none; border: 0; color: var(--muted); font: inherit; padding: 6px 10px;
+               border-radius: 8px; cursor: pointer; }
+  nav button.active { color: var(--text); background: var(--bg); font-weight: 600; }
+  .pills { margin-left: auto; display: flex; gap: 16px; color: var(--muted); font-size: 14px; flex-wrap: wrap; }
+  .pills b { color: var(--text); }
+  main { max-width: 760px; margin: 32px auto; padding: 0 16px; }
+  .panel { background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 28px; }
+  .tags { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 18px; }
+  .tag { font-size: 12px; padding: 2px 10px; border-radius: 99px; background: var(--bg);
+         color: var(--muted); border: 1px solid var(--line); }
+  .tag.new { color: var(--accent); border-color: var(--accent); }
+  .ask { color: var(--muted); font-size: 14px; margin: 0 0 4px; }
+  .prompt { font-size: 32px; font-weight: 650; margin: 0 0 22px; word-break: break-word; }
+  input[type=text], input[type=number], select, textarea {
+    font: inherit; color: var(--text); background: var(--bg); border: 1px solid var(--line);
+    border-radius: 10px; padding: 10px 12px; width: 100%; }
+  #answer { font-size: 22px; padding: 12px 14px; }
+  input:focus, textarea:focus, select:focus { outline: 2px solid var(--accent); outline-offset: -1px; }
+  .row { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; margin-top: 14px; }
+  button.btn { font: inherit; border: 1px solid var(--line); background: var(--panel); color: var(--text);
+               padding: 9px 16px; border-radius: 10px; cursor: pointer; }
+  button.btn:hover { border-color: var(--muted); }
+  button.primary { background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 600; }
+  button.small { padding: 4px 10px; font-size: 14px; }
+  .umlauts button { min-width: 40px; }
+  .hint { color: var(--muted); font-family: ui-monospace, monospace; letter-spacing: 2px; margin-top: 10px; }
+  .note { margin-top: 12px; padding: 10px 14px; border-radius: 10px; background: var(--warn-bg); color: var(--warn); }
+  .result { margin-top: 20px; padding: 18px; border-radius: 12px; }
+  .result.good { background: var(--good-bg); } .result.warn { background: var(--warn-bg); }
+  .result.bad { background: var(--bad-bg); }
+  .result .msg { font-weight: 650; margin-bottom: 8px; }
+  .good .msg { color: var(--good); } .warn .msg { color: var(--warn); } .bad .msg { color: var(--bad); }
+  .result dl { display: grid; grid-template-columns: max-content 1fr; gap: 4px 14px; margin: 0; }
+  .result dt { color: var(--muted); } .result dd { margin: 0; }
+  .example { font-style: italic; }
+  .kbd { color: var(--muted); font-size: 13px; }
+  .empty { text-align: center; color: var(--muted); padding: 40px 0; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; margin-bottom: 20px; }
+  .stat { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 14px 16px; }
+  .stat .v { font-size: 26px; font-weight: 700; } .stat .l { color: var(--muted); font-size: 13px; }
+  h2 { font-size: 17px; margin: 26px 0 12px; }
+  .bars { display: flex; align-items: flex-end; gap: 6px; height: 140px; padding-top: 10px; }
+  .bar { flex: 1; display: flex; flex-direction: column; justify-content: flex-end; align-items: center; height: 100%; }
+  .bar .stack { width: 100%; display: flex; flex-direction: column-reverse; border-radius: 4px 4px 0 0; overflow: hidden; }
+  .bar .ok { background: var(--good); } .bar .ko { background: var(--bad); opacity: .75; }
+  .bar small { font-size: 10px; color: var(--muted); margin-top: 4px; white-space: nowrap; }
+  table { width: 100%; border-collapse: collapse; font-size: 14px; }
+  th, td { text-align: left; padding: 7px 8px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  th { color: var(--muted); font-weight: 500; }
+  .progress { height: 8px; background: var(--bg); border-radius: 99px; overflow: hidden; display: flex; }
+  .progress i { display: block; height: 100%; }
+  .muted { color: var(--muted); }
+  .form { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .form .full { grid-column: 1 / -1; }
+  .err { color: var(--bad); }
+  @media (max-width: 560px) { .prompt { font-size: 25px; } .form { grid-template-columns: 1fr; } .panel { padding: 18px; } }
+</style>
+</head>
+<body>
+<header>
+  <h1>🇩🇪 Wortschatz → C2</h1>
+  <nav>
+    <button data-tab="train" class="active">Train</button>
+    <button data-tab="stats">Progress</button>
+    <button data-tab="words">Words</button>
+  </nav>
+  <div class="pills" id="pills"></div>
+</header>
+
+<main>
+  <section id="tab-train"><div class="panel" id="card"></div></section>
+  <section id="tab-stats" hidden></section>
+  <section id="tab-words" hidden>
+    <div class="panel">
+      <h2 style="margin-top:0" id="form-title">Add a word</h2>
+      <div class="form">
+        <input type="hidden" id="w-id">
+        <input type="text" id="w-de" placeholder="German (nouns with article: die Nachhaltigkeit)">
+        <input type="text" id="w-en" placeholder="English (alternatives with |  e.g. decisive|crucial)">
+        <select id="w-level"><option>B2</option><option selected>C1</option><option>C2</option></select>
+        <input type="text" id="w-example" placeholder="Example sentence in German (optional)">
+        <input type="text" id="w-example-en" class="full" placeholder="Example translated to English (optional)">
+        <div class="full row" style="margin:0">
+          <button class="btn primary" id="w-save">Save</button>
+          <button class="btn" id="w-cancel" hidden>Cancel edit</button>
+          <span id="w-msg"></span>
+        </div>
+      </div>
+      <details style="margin-top:16px">
+        <summary class="muted" style="cursor:pointer">Bulk import (paste lines: german;english;level;example;example_en)</summary>
+        <textarea id="imp-text" rows="6" style="margin-top:10px" placeholder="die Tragweite;scope|significance;C2;Die Tragweite ist enorm.&#10;erörtern;to discuss;C2"></textarea>
+        <div class="row"><button class="btn" id="imp-go">Import</button><span id="imp-msg"></span></div>
+      </details>
+    </div>
+    <h2>Word list <span class="muted" id="w-total"></span></h2>
+    <input type="text" id="w-search" placeholder="Search German or English…">
+    <table style="margin-top:10px">
+      <thead><tr><th>German</th><th>English</th><th>Lvl</th><th>DE→EN</th><th>EN→DE</th><th></th></tr></thead>
+      <tbody id="w-rows"></tbody>
+    </table>
+  </section>
+</main>
+
+<script>
+const $ = s => document.querySelector(s);
+const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+async function api(path, method = "GET", body) {
+  const r = await fetch(path, {method, headers: {"Content-Type": "application/json"},
+                               body: body ? JSON.stringify(body) : undefined});
+  const j = await r.json();
+  if (!r.ok) throw new Error(j.error || r.statusText);
+  return j;
+}
+
+// ------------------------------------------------------------------ tabs
+document.querySelectorAll("nav button").forEach(b => b.onclick = () => showTab(b.dataset.tab));
+function showTab(name) {
+  document.querySelectorAll("nav button").forEach(b => b.classList.toggle("active", b.dataset.tab === name));
+  for (const t of ["train", "stats", "words"]) $("#tab-" + t).hidden = t !== name;
+  if (name === "stats") loadStats();
+  if (name === "words") loadWords();
+  if (name === "train") { if (!card || state === "done") loadNext(); else focusAnswer(); }
+}
+
+// ------------------------------------------------------------------ training
+let card = null, result = null, hinted = false, state = "ask", lastWord = null;
+
+function renderPills(s) {
+  const acc = s.today_reviews ? Math.round(100 * s.today_correct / s.today_reviews) + "%" : "–";
+  $("#pills").innerHTML = `<span>Due <b>${s.due}</b></span>
+    <span>New today <b>${s.new_today}/${s.new_limit}</b></span>
+    <span>Today <b>${s.today_reviews}</b> · <b>${acc}</b></span>`;
+}
+
+async function loadNext() {
+  const r = await api("/api/next" + (lastWord ? "?exclude=" + lastWord : ""));
+  renderPills(r.summary);
+  card = r.card; result = null; hinted = false;
+  if (!card) {
+    state = "done";
+    $("#card").innerHTML = `<div class="empty">No words match your current settings.<br>
+      Add words in the <b>Words</b> tab or change levels in <b>Progress</b>.</div>`;
+    return;
+  }
+  state = "ask";
+  const toDe = card.direction === "en2de";
+  const kindTag = {new: '<span class="tag new">new word</span>', review: '<span class="tag">review</span>',
+                   practice: '<span class="tag">extra practice – nothing due</span>'}[card.kind];
+  $("#card").innerHTML = `
+    <div class="tags">${kindTag}<span class="tag">${esc(card.level)}</span><span class="tag">${esc(card.type)}</span>
+      <span class="tag">${toDe ? "🇬🇧 → 🇩🇪" : "🇩🇪 → 🇬🇧"}</span></div>
+    <p class="ask">${toDe ? "Translate into German" + (card.type === "noun" ? " — with article (der/die/das)" : "")
+                          : "Translate into English"}</p>
+    <p class="prompt">${esc(card.prompt)}</p>
+    <input type="text" id="answer" autocomplete="off" autocapitalize="off" spellcheck="false"
+           placeholder="${toDe ? "Deutsch…" : "English…"}">
+    ${toDe ? `<div class="row umlauts">${["ä","ö","ü","ß","Ä","Ö","Ü"].map(c =>
+        `<button class="btn small" data-ch="${c}">${c}</button>`).join("")}</div>` : ""}
+    <div id="hint"></div><div id="note"></div>
+    <div class="row">
+      <button class="btn primary" id="check">Check</button>
+      <button class="btn" id="hintbtn">Hint</button>
+      <button class="btn" id="idk">I don't know</button>
+      <span class="kbd">Enter = check</span>
+    </div>
+    <div id="result"></div>`;
+  document.querySelectorAll("[data-ch]").forEach(b => b.onclick = () => insertChar(b.dataset.ch));
+  $("#check").onclick = check;
+  $("#hintbtn").onclick = showHint;
+  $("#idk").onclick = () => check(true);
+  focusAnswer();
+}
+
+function focusAnswer() { const a = $("#answer"); if (a && !a.disabled) a.focus(); }
+
+function insertChar(ch) {
+  const a = $("#answer"), s = a.selectionStart, e = a.selectionEnd;
+  a.value = a.value.slice(0, s) + ch + a.value.slice(e);
+  a.focus(); a.setSelectionRange(s + 1, s + 1);
+}
+
+async function showHint() {
+  const r = await api(`/api/hint?word_id=${card.word_id}&direction=${card.direction}`);
+  hinted = true;
+  $("#hint").innerHTML = `<div class="hint">${esc(r.hint)}</div>`;
+  focusAnswer();
+}
+
+async function check(giveUp = false) {
+  if (state !== "ask") return;
+  const answer = giveUp === true ? "" : $("#answer").value.trim();
+  if (!answer && giveUp !== true) return;
+  const r = await api("/api/check", "POST", {word_id: card.word_id, direction: card.direction, answer, hinted});
+  if (r.verdict === "synonym") {
+    $("#note").innerHTML = `<div class="note">${esc(r.message)} <span class="muted">(“${esc(r.synonym_of)}” is another word for this)</span></div>`;
+    $("#answer").select();
+    return;
+  }
+  result = {...r, answer};
+  state = "result";
+  $("#answer").disabled = true;
+  $("#note").innerHTML = "";
+  for (const id of ["#check", "#hintbtn", "#idk"]) $(id).hidden = true;
+  renderResult();
+}
+
+function renderResult() {
+  const r = result, cls = r.quality >= 4 ? "good" : r.quality === 3 ? "warn" : "bad";
+  $("#result").innerHTML = `
+    <div class="result ${cls}">
+      <div class="msg">${esc(r.message)}</div>
+      <dl>
+        ${r.answer ? `<dt>You wrote</dt><dd>${esc(r.answer)}</dd>` : ""}
+        <dt>German</dt><dd><b>${esc(r.de)}</b></dd>
+        <dt>English</dt><dd>${esc(r.en)}</dd>
+        ${r.example ? `<dt>Example</dt><dd><span class="example">${esc(r.example)}</span>
+          ${r.example_en ? `<div class="muted">${esc(r.example_en)}</div>` : ""}</dd>` : ""}
+      </dl>
+    </div>
+    <div class="row">
+      <button class="btn primary" id="next">Next →</button>
+      ${r.quality < 3 && r.answer ? `<button class="btn" id="override">I was right</button>` : ""}
+      ${r.quality >= 3 ? `<button class="btn" id="markwrong">Count as wrong</button>` : ""}
+      <button class="btn" id="editw">Edit word</button>
+      <span class="kbd">Enter = next</span>
+    </div>`;
+  $("#next").onclick = next;
+  if ($("#override")) $("#override").onclick = () => { result.quality = 4; next(); };
+  if ($("#markwrong")) $("#markwrong").onclick = () => { result.quality = 1; next(); };
+  $("#editw").onclick = async () => {
+    showTab("words");
+    const w = (await api("/api/words?q=" + encodeURIComponent(r.de.split(" / ")[0]))).words
+              .find(x => x.id === card.word_id);
+    if (w) editWord(w);
+  };
+  $("#next").focus();
+}
+
+async function next() {
+  if (state !== "result") return;
+  state = "saving";
+  await api("/api/grade", "POST", {word_id: card.word_id, direction: card.direction,
+                                   quality: result.quality, answer: result.answer});
+  lastWord = card.word_id;
+  loadNext();
+}
+
+document.addEventListener("keydown", e => {
+  if (e.key !== "Enter" || $("#tab-train").hidden) return;
+  if (state === "ask" && document.activeElement?.id === "answer") { e.preventDefault(); check(); }
+  else if (state === "result") { e.preventDefault(); next(); }
+});
+
+// ------------------------------------------------------------------ stats + settings
+async function loadStats() {
+  const s = await api("/api/stats");
+  renderPills(s.summary);
+  const seen = s.per_level.reduce((a, l) => a + l.seen, 0);
+  const mastered = s.per_level.reduce((a, l) => a + l.mastered, 0);
+  const cards = s.per_level.reduce((a, l) => a + l.cards, 0);
+  const acc = s.all_reviews ? Math.round(100 * s.all_correct / s.all_reviews) + "%" : "–";
+  const max = Math.max(1, ...s.days.map(d => d.reviews));
+  const st = s.settings;
+  $("#tab-stats").innerHTML = `
+    <div class="grid">
+      <div class="stat"><div class="v">${s.streak}🔥</div><div class="l">day streak</div></div>
+      <div class="stat"><div class="v">${mastered}</div><div class="l">cards mastered (21+ days)</div></div>
+      <div class="stat"><div class="v">${seen}/${cards}</div><div class="l">cards started</div></div>
+      <div class="stat"><div class="v">${acc}</div><div class="l">overall accuracy (${s.all_reviews} answers)</div></div>
+      <div class="stat"><div class="v">${s.summary.due}</div><div class="l">due now · ${s.due_next_24h} in next 24 h</div></div>
+    </div>
+    <div class="panel">
+      <h2 style="margin-top:0">Last 14 days</h2>
+      <div class="bars">${s.days.map(d => `
+        <div class="bar" title="${d.date}: ${d.reviews} answers, ${d.correct} correct">
+          <div class="stack" style="height:${100 * d.reviews / max}%">
+            <div class="ok" style="flex:${d.correct}"></div><div class="ko" style="flex:${d.reviews - d.correct}"></div>
+          </div><small>${d.date.slice(3, 9)}</small></div>`).join("")}
+      </div>
+      <h2>By level <span class="muted" style="font-weight:400;font-size:13px">— green: mastered · amber: in progress · each word = 2 cards (DE→EN, EN→DE)</span></h2>
+      <table>${s.per_level.map(l => `
+        <tr><td style="width:50px"><b>${l.level}</b></td>
+          <td><div class="progress">
+            <i style="width:${l.cards ? 100 * l.mastered / l.cards : 0}%;background:var(--good)"></i>
+            <i style="width:${l.cards ? 100 * (l.seen - l.mastered) / l.cards : 0}%;background:var(--warn)"></i></div></td>
+          <td class="muted" style="width:190px">${l.mastered} mastered · ${l.seen}/${l.cards} started</td></tr>`).join("")}
+      </table>
+      <h2>Your trouble words</h2>
+      ${s.hardest.length ? `<table><thead><tr><th>German</th><th>English</th><th>Direction</th><th>✓</th><th>✗</th></tr></thead>
+        ${s.hardest.map(h => `<tr><td><b>${esc(h.de.split("|")[0])}</b></td><td>${esc(h.en.split("|").slice(0, 2).join(", "))}</td>
+          <td class="muted">${h.direction === "de2en" ? "DE→EN" : "EN→DE"}</td><td>${h.correct}</td><td>${h.wrong}</td></tr>`).join("")}</table>`
+        : `<p class="muted">None yet – mistakes will show up here and get repeated more often.</p>`}
+      <h2>Settings</h2>
+      <div class="row">
+        <span>Levels:</span>
+        ${["B2", "C1", "C2"].map(l => `<label><input type="checkbox" class="set-level" value="${l}" ${st.levels.includes(l) ? "checked" : ""}> ${l}</label>`).join(" ")}
+      </div>
+      <div class="row">
+        <label style="flex:1">Direction
+          <select id="set-mode">
+            <option value="mixed" ${st.mode === "mixed" ? "selected" : ""}>Mixed (random)</option>
+            <option value="de2en" ${st.mode === "de2en" ? "selected" : ""}>German → English only</option>
+            <option value="en2de" ${st.mode === "en2de" ? "selected" : ""}>English → German only</option>
+          </select></label>
+        <label style="flex:1">New cards per day
+          <input type="number" id="set-new" min="0" max="500" value="${st.new_per_day}"></label>
+      </div>
+      <div class="row"><button class="btn primary" id="set-save">Save settings</button><span id="set-msg"></span></div>
+    </div>`;
+  $("#set-save").onclick = async () => {
+    const levels = [...document.querySelectorAll(".set-level:checked")].map(c => c.value);
+    await api("/api/settings", "POST", {levels, mode: $("#set-mode").value, new_per_day: +$("#set-new").value});
+    $("#set-msg").textContent = "Saved ✓";
+    card = null;  // next card should respect new settings
+  };
+}
+
+// ------------------------------------------------------------------ word list
+let searchTimer;
+$("#w-search").oninput = () => { clearTimeout(searchTimer); searchTimer = setTimeout(loadWords, 200); };
+
+function progCell(p) {
+  if (!p) return `<span class="muted">new</span>`;
+  return `${p.mastered ? "⭐ " : ""}<span title="next interval">${p.interval}</span>
+          <span class="muted">(${p.correct}✓ ${p.wrong}✗)</span>`;
+}
+
+let wordCache = {};
+async function loadWords() {
+  const r = await api("/api/words?q=" + encodeURIComponent($("#w-search").value));
+  $("#w-total").textContent = `(${r.total} total${r.words.length < r.total ? `, showing ${r.words.length}` : ""})`;
+  wordCache = Object.fromEntries(r.words.map(w => [w.id, w]));
+  $("#w-rows").innerHTML = r.words.map(w => `<tr>
+      <td><b>${esc(w.de.replaceAll("|", " / "))}</b>${w.example ? `<div class="muted example">${esc(w.example)}</div>` : ""}${w.example_en ? `<div class="muted" style="font-size:13px">${esc(w.example_en)}</div>` : ""}</td>
+      <td>${esc(w.en.replaceAll("|", " / "))}</td><td>${w.level}</td>
+      <td>${progCell(w.de2en)}</td><td>${progCell(w.en2de)}</td>
+      <td style="white-space:nowrap"><button class="btn small" data-edit="${w.id}">Edit</button>
+          <button class="btn small" data-del="${w.id}">✕</button></td></tr>`).join("");
+  document.querySelectorAll("[data-edit]").forEach(b => b.onclick = () => editWord(wordCache[b.dataset.edit]));
+  document.querySelectorAll("[data-del]").forEach(b => b.onclick = async () => {
+    const w = wordCache[b.dataset.del];
+    if (!confirm(`Delete “${w.de}” and its progress?`)) return;
+    await api("/api/words/" + w.id, "DELETE");
+    loadWords();
+  });
+}
+
+function editWord(w) {
+  $("#w-id").value = w.id; $("#w-de").value = w.de; $("#w-en").value = w.en;
+  $("#w-level").value = w.level; $("#w-example").value = w.example; $("#w-example-en").value = w.example_en || "";
+  $("#form-title").textContent = "Edit word"; $("#w-cancel").hidden = false; $("#w-msg").textContent = "";
+  window.scrollTo({top: 0, behavior: "smooth"}); $("#w-de").focus();
+}
+
+function resetForm() {
+  for (const id of ["#w-id", "#w-de", "#w-en", "#w-example", "#w-example-en"]) $(id).value = "";
+  $("#form-title").textContent = "Add a word"; $("#w-cancel").hidden = true;
+}
+
+$("#w-cancel").onclick = () => { resetForm(); $("#w-msg").textContent = ""; };
+$("#w-save").onclick = async () => {
+  try {
+    const editing = !!$("#w-id").value;
+    await api("/api/words", "POST", {id: $("#w-id").value || null, de: $("#w-de").value, en: $("#w-en").value,
+                                     level: $("#w-level").value, example: $("#w-example").value,
+                                     example_en: $("#w-example-en").value});
+    $("#w-msg").innerHTML = editing ? "Updated ✓" : "Added ✓";
+    resetForm(); loadWords(); $("#w-de").focus();
+  } catch (e) { $("#w-msg").innerHTML = `<span class="err">${esc(e.message)}</span>`; }
+};
+$("#imp-go").onclick = async () => {
+  try {
+    const r = await api("/api/import", "POST", {text: $("#imp-text").value});
+    $("#imp-msg").textContent = `Added ${r.added} of ${r.parsed} lines (duplicates skipped).`;
+    $("#imp-text").value = ""; loadWords();
+  } catch (e) { $("#imp-msg").innerHTML = `<span class="err">${esc(e.message)}</span>`; }
+};
+
+loadNext();
+</script>
+</body>
+</html>
