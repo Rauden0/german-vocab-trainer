@@ -9,7 +9,16 @@ python3 app.py            # opens http://127.0.0.1:8765 in your browser
 python3 app.py --no-browser
 ```
 
-You only need Python 3. Nothing else has to be installed. Your progress is saved in `german.db`. Back up that file to keep your history.
+You only need Python 3. Nothing else has to be installed.
+
+## Your progress (`progress.json`)
+
+- The app works from a local database, `german.db`. Git ignores this file.
+- After every answer the app also writes **`progress.json`**. It holds your card schedules, your answer history, your settings, and any words you added, edited or deleted.
+- On start, the app merges `progress.json` into the database. For each card, the most recently practised version wins.
+- **To keep your progress on GitHub:** commit and push `progress.json`.
+- **To continue on another computer:** `git pull`, then `python3 app.py`.
+- If you practise on two computers without pulling in between, `progress.json` can get a git merge conflict. Pull before you practise.
 
 ## How it works
 

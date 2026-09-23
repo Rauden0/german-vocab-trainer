@@ -1,0 +1,8 @@
+{
+  "version": 1,
+  "settings": {"levels": ["B2", "C1", "C2"], "mode": "mixed", "new_per_day": 25},
+  "words": [],
+  "deleted": [],
+  "progress": [],
+  "log": []
+}

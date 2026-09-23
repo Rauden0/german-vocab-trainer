@@ -12,6 +12,7 @@ import random
 import re
 import sqlite3
 import sys
+import threading
 import time
 import unicodedata
 import webbrowser
@@ -23,6 +24,8 @@ from urllib.parse import parse_qs, urlparse
 
 ROOT = Path(__file__).resolve().parent
 DB_PATH = Path(os.environ.get("WORTSCHATZ_DB", ROOT / "german.db"))
+# Portable copy of your progress (commit this to git; german.db stays local).
+JSON_PATH = Path(os.environ.get("WORTSCHATZ_JSON", ROOT / "progress.json"))
 DATA_DIR = ROOT / "data"
 STATIC_DIR = ROOT / "static"
 PORT = int(os.environ.get("PORT", 8765))
@@ -42,6 +45,7 @@ CREATE TABLE IF NOT EXISTS words(
   example TEXT NOT NULL DEFAULT '',
   example_en TEXT NOT NULL DEFAULT '',
   rank INTEGER NOT NULL DEFAULT 0,
+  custom INTEGER NOT NULL DEFAULT 0,
   created REAL NOT NULL
 );
 CREATE TABLE IF NOT EXISTS progress(
@@ -126,14 +130,14 @@ def parse_rows(text):
     return rows
 
 
-def insert_rows(con, rows, respect_tombstones=False):
+def insert_rows(con, rows, respect_tombstones=False, custom=0):
     added = 0
     for de, en, level, example, example_en, rank in rows:
         if respect_tombstones and con.execute("SELECT 1 FROM tombstones WHERE de=?", (de,)).fetchone():
             continue
         cur = con.execute(
-            "INSERT OR IGNORE INTO words(de, en, level, example, example_en, rank, created) VALUES (?,?,?,?,?,?,?)",
-            (de, en, level, example, example_en, rank, time.time()))
+            "INSERT OR IGNORE INTO words(de, en, level, example, example_en, rank, custom, created)"
+            " VALUES (?,?,?,?,?,?,?,?)", (de, en, level, example, example_en, rank, custom, time.time()))
         added += cur.rowcount
         if not cur.rowcount and example_en:
             # Existing word: fill in a missing example translation, never overwrite user edits.
@@ -150,7 +154,11 @@ def init_db():
             con.execute("ALTER TABLE words ADD COLUMN example_en TEXT NOT NULL DEFAULT ''")
         if "rank" not in cols:
             con.execute("ALTER TABLE words ADD COLUMN rank INTEGER NOT NULL DEFAULT 0")
+        if "custom" not in cols:
+            con.execute("ALTER TABLE words ADD COLUMN custom INTEGER NOT NULL DEFAULT 0")
         con.execute("CREATE INDEX IF NOT EXISTS words_rank ON words(level, rank)")
+        con.execute("UPDATE log SET ts=round(ts, 3) WHERE ts != round(ts, 3)")
+        con.execute("CREATE UNIQUE INDEX IF NOT EXISTS log_uniq ON log(ts, word_id, direction)")
         # (Re)import seed files whenever they change; existing words are kept as-is.
         seen = json.loads((con.execute("SELECT value FROM settings WHERE key='_seed_mtimes'").fetchone()
                            or ["{}"])[0])
@@ -161,6 +169,81 @@ def init_db():
                 print(f"  imported {n} new words from {f.name}")
                 seen[f.name] = mtime
         con.execute("INSERT OR REPLACE INTO settings VALUES ('_seed_mtimes', ?)", (json.dumps(seen),))
+        if JSON_PATH.exists():
+            print("  " + load_progress_json(con))
+        export_progress_json(con)
+
+
+# ---------------------------------------------------------------- progress.json (portable save)
+
+PROGRESS_FIELDS = ["reps", "ease", "interval", "due", "correct", "wrong", "lapses", "first_seen", "last_seen"]
+WORD_FIELDS = ["de", "en", "level", "example", "example_en"]
+
+
+def export_progress_json(con):
+    """Write progress.json: one record per line so git diffs stay small and readable."""
+    progress = [{"de": r["de"], "dir": r["direction"],
+                 **{k: round(r[k], 3) if isinstance(r[k], float) else r[k] for k in PROGRESS_FIELDS}}
+                for r in con.execute("""SELECT w.de, p.* FROM progress p JOIN words w ON w.id=p.word_id
+                                        ORDER BY w.de, p.direction""")]
+    log = [[r["ts"], r["de"], r["direction"], r["quality"]]
+           for r in con.execute("""SELECT l.ts, w.de, l.direction, l.quality FROM log l
+                                   JOIN words w ON w.id=l.word_id ORDER BY l.ts""")]
+    words = [{k: r[k] for k in WORD_FIELDS}
+             for r in con.execute("SELECT * FROM words WHERE custom=1 ORDER BY de")]
+    deleted = [r[0] for r in con.execute("SELECT de FROM tombstones ORDER BY de")]
+    settings = get_settings(con)
+
+    def block(name, items):
+        body = ",\n".join("    " + json.dumps(x, ensure_ascii=False) for x in items)
+        return f'  "{name}": [\n{body}\n  ]' if items else f'  "{name}": []'
+
+    text = "{\n" + ",\n".join([
+        '  "version": 1',
+        f'  "settings": {json.dumps(settings, ensure_ascii=False)}',
+        block("words", words), block("deleted", deleted),
+        block("progress", progress), block("log", log)]) + "\n}\n"
+    tmp = JSON_PATH.with_name(f".{JSON_PATH.name}.{os.getpid()}.{threading.get_ident()}.tmp")
+    tmp.write_text(text, encoding="utf-8")
+    tmp.replace(JSON_PATH)
+
+
+def load_progress_json(con):
+    """Merge progress.json into the database. Safe to run repeatedly: for each card the most
+    recently practised version wins, and answer history is combined without duplicates."""
+    data = json.loads(JSON_PATH.read_text(encoding="utf-8"))
+    for de in data.get("deleted", []):
+        con.execute("INSERT OR IGNORE INTO tombstones VALUES (?)", (de,))
+        con.execute("DELETE FROM words WHERE de=?", (de,))
+    for w in data.get("words", []):
+        vals = [w.get(k, "") for k in WORD_FIELDS]
+        if con.execute("SELECT 1 FROM words WHERE de=?", (w["de"],)).fetchone():
+            con.execute("UPDATE words SET en=?, level=?, example=?, example_en=?, custom=1 WHERE de=?",
+                        (*vals[1:], w["de"]))
+        else:
+            con.execute("""INSERT INTO words(de, en, level, example, example_en, custom, created)
+                           VALUES (?,?,?,?,?,1,?)""", (*vals, time.time()))
+    ids = {r["de"]: r["id"] for r in con.execute("SELECT id, de FROM words")}
+    cards = entries = 0
+    for p in data.get("progress", []):
+        wid = ids.get(p["de"])
+        if wid is None:
+            continue
+        cur = con.execute("SELECT last_seen FROM progress WHERE word_id=? AND direction=?",
+                          (wid, p["dir"])).fetchone()
+        if cur and cur[0] >= p["last_seen"]:
+            continue
+        con.execute(f"""INSERT OR REPLACE INTO progress(word_id, direction, {", ".join(PROGRESS_FIELDS)})
+                        VALUES (?, ?, {", ".join("?" * len(PROGRESS_FIELDS))})""",
+                    (wid, p["dir"], *[p[k] for k in PROGRESS_FIELDS]))
+        cards += 1
+    for ts, de, direction, quality in data.get("log", []):
+        if de in ids:
+            entries += con.execute("INSERT OR IGNORE INTO log(ts, word_id, direction, quality) VALUES (?,?,?,?)",
+                                   (ts, ids[de], direction, quality)).rowcount
+    if data.get("settings"):
+        save_settings(con, data["settings"])
+    return f"loaded {JSON_PATH.name}: {cards} cards updated, {entries} new history entries"
 
 
 # ---------------------------------------------------------------- answer checking
@@ -398,7 +481,7 @@ def check_answer(con, wid, direction, answer, hinted):
 
 
 def grade(con, wid, direction, q, answer):
-    now = time.time()
+    now = round(time.time(), 3)
     q = max(0, min(5, int(q)))
     p = con.execute("SELECT * FROM progress WHERE word_id=? AND direction=?", (wid, direction)).fetchone()
     if p is None:
@@ -481,14 +564,17 @@ def save_word(con, data):
     example = data.get("example", "").strip()
     example_en = data.get("example_en", "").strip()
     if data.get("id"):
-        con.execute("UPDATE words SET de=?, en=?, level=?, example=?, example_en=? WHERE id=?",
+        old = con.execute("SELECT de FROM words WHERE id=?", (int(data["id"]),)).fetchone()
+        if old and old["de"] != de:
+            con.execute("INSERT OR IGNORE INTO tombstones VALUES (?)", (old["de"],))  # renamed
+        con.execute("UPDATE words SET de=?, en=?, level=?, example=?, example_en=?, custom=1 WHERE id=?",
                     (de, en, level, example, example_en, int(data["id"])))
         return {"id": int(data["id"])}
     if con.execute("SELECT 1 FROM words WHERE de=?", (de,)).fetchone():
         raise ValueError(f"'{de}' is already in the list.")
     con.execute("DELETE FROM tombstones WHERE de=?", (de,))
-    cur = con.execute("INSERT INTO words(de, en, level, example, example_en, created) VALUES (?,?,?,?,?,?)",
-                      (de, en, level, example, example_en, time.time()))
+    cur = con.execute("""INSERT INTO words(de, en, level, example, example_en, custom, created)
+                         VALUES (?,?,?,?,?,1,?)""", (de, en, level, example, example_en, time.time()))
     return {"id": cur.lastrowid}
 
 
@@ -506,7 +592,12 @@ class Handler(BaseHTTPRequestHandler):
     def log_message(self, *args):
         pass
 
+    changed = False
+
     def reply(self, obj, code=200):
+        if self.changed and code == 200:
+            self.con.commit()
+            export_progress_json(self.con)
         body = json.dumps(obj, ensure_ascii=False).encode()
         self.send_response(code)
         self.send_header("Content-Type", "application/json; charset=utf-8")
@@ -524,6 +615,7 @@ class Handler(BaseHTTPRequestHandler):
         path = url.path
         try:
             with db() as con:
+                self.con = con
                 if method == "GET" and path == "/api/next":
                     ex = int(qs["exclude"]) if qs.get("exclude", "").isdigit() else None
                     return self.reply({"card": next_card(con, ex), "summary": summary(con, get_settings(con))})
@@ -535,6 +627,9 @@ class Handler(BaseHTTPRequestHandler):
                     w = con.execute("SELECT de, en FROM words WHERE id=?", (int(qs["word_id"]),)).fetchone()
                     target = w["en"] if qs.get("direction") == "de2en" else w["de"]
                     return self.reply({"hint": mask(alts(target)[0])})
+                if method == "POST" or method == "DELETE":
+                    if path != "/api/check":
+                        self.changed = True
                 if method == "POST":
                     d = self.payload()
                     if path == "/api/check":
@@ -549,7 +644,7 @@ class Handler(BaseHTTPRequestHandler):
                         return self.reply(save_word(con, d))
                     if path == "/api/import":
                         rows = parse_rows(d.get("text", ""))
-                        return self.reply({"parsed": len(rows), "added": insert_rows(con, rows)})
+                        return self.reply({"parsed": len(rows), "added": insert_rows(con, rows, custom=1)})
                 if method == "DELETE" and path.startswith("/api/words/"):
                     return self.reply(delete_word(con, int(path.rsplit("/", 1)[1])))
             self.reply({"error": "not found"}, 404)
