@@ -11,6 +11,34 @@ python3 app.py --no-browser
 
 You only need Python 3. Nothing else has to be installed.
 
+## On your phone
+
+**Option 1: same Wi-Fi as your computer (any phone)**
+
+```bash
+python3 app.py --lan
+```
+
+- The terminal prints an address like `http://192.168.1.23:8765`. Open it in your phone's browser.
+- In the browser menu, choose "Add to Home screen" to get an app-like icon.
+- The computer has to stay on with the app running.
+- Anyone on the same network can open the app, so only use `--lan` on a network you trust.
+
+**Option 2: directly on an Android phone (no computer needed)**
+
+1. Install **Termux** from F-Droid (the Google Play version is outdated).
+2. In Termux:
+   ```bash
+   pkg install python git
+   git clone https://github.com/Rauden0/german-vocab-trainer.git
+   cd german-vocab-trainer
+   python app.py
+   ```
+3. Open `http://127.0.0.1:8765` in the phone's browser.
+
+To sync progress between the phone and your computer, use `git pull` and push `progress.json` (see below).
+iPhone can only use option 1.
+
 ## Your progress (`progress.json`)
 
 - The app works from a local database, `german.db`. Git ignores this file.

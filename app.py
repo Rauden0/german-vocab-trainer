@@ -2,6 +2,7 @@
 """Wortschatz – adaptive German vocabulary trainer (B2 -> C2).
 
 Run:  python3 app.py        then open http://127.0.0.1:8765
+      python3 app.py --lan  to also use it from your phone on the same Wi-Fi
 No third-party packages needed. Progress is stored in german.db (SQLite).
 """
 import csv
@@ -670,11 +671,25 @@ class Handler(BaseHTTPRequestHandler):
         self.handle_api("DELETE")
 
 
+def lan_ip():
+    """The address other devices on the local network can reach this computer at."""
+    import socket
+    with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as sock:
+        try:
+            sock.connect(("192.168.0.1", 9))  # no packet is sent; just picks the outgoing interface
+            return sock.getsockname()[0]
+        except OSError:
+            return "127.0.0.1"
+
+
 def main():
     init_db()
     url = f"http://127.0.0.1:{PORT}"
-    server = ThreadingHTTPServer(("127.0.0.1", PORT), Handler)
+    lan = "--lan" in sys.argv  # also reachable from your phone on the same Wi-Fi
+    server = ThreadingHTTPServer(("0.0.0.0" if lan else "127.0.0.1", PORT), Handler)
     print(f"Wortschatz trainer running at {url}  (Ctrl+C to stop)")
+    if lan:
+        print(f"On your phone (same Wi-Fi) open:  http://{lan_ip()}:{PORT}")
     if "--no-browser" not in sys.argv:
         webbrowser.open(url)
     try:
